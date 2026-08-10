@@ -88,6 +88,32 @@ def run_pipeline(
                 ],
             )
 
+        if not result.failures:
+            # pytest ran but collected zero failing tests to report on —
+            # usually means 0 tests were collected at all (wrong path,
+            # missing __init__.py, dependency install didn't actually
+            # succeed, or test_path doesn't match anything in this repo).
+            return OrchestrationResult(
+                success=False,
+                final_diff=None,
+                attempts=[
+                    AttemptLog(
+                        attempt_number=0,
+                        diff=None,
+                        explanation=None,
+                        outcome="no_tests_collected",
+                        detail=(
+                            f"pytest reported {result.total} total tests and "
+                            f"passed={result.passed}, but no specific failure was "
+                            f"captured. This usually means pytest collected 0 tests "
+                            f"(check test_path is correct, dependencies installed "
+                            f"correctly, and the repo layout matches expectations). "
+                            f"Raw pytest output:\n{result.raw_stdout}"
+                        ),
+                    )
+                ],
+            )
+
         failure = result.failures[0]  # v1: fix one failure at a time
         implicated = expand_with_local_imports(sandbox, failure.implicated_files)
         source_files = read_source_files(sandbox, implicated)

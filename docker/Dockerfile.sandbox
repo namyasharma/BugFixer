@@ -1,0 +1,41 @@
+# Sandbox image used to clone a target repo, install its deps,
+# run its test suite, and validate LLM-generated patches.
+#
+# Design notes:
+# - Kept minimal on purpose: v1 targets Python/pytest repos only.
+# - No network access at *runtime* (enforced by the container runner,
+#   see sandbox.py) — dependencies are installed at build/setup time,
+#   after which the container should be run with network disabled.
+# - Runs as a non-root user so a bad patch can't do anything cute
+#   with root inside the container (still just a container, not a
+#   full VM — don't treat this as a strong security boundary against
+#   a truly adversarial LLM output).
+
+FROM python:3.11-slim
+
+# System deps needed to build most common Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user
+RUN useradd -m -u 1000 sandbox
+WORKDIR /workspace
+
+# Tooling used to run + report on tests in a structured (parseable) way
+RUN pip install --no-cache-dir \
+    pytest \
+    pytest-json-report \
+    pytest-timeout
+
+# The target repo gets bind-mounted at runtime to /workspace/repo
+# (see sandbox.py — we don't COPY it in, so the same image can be
+# reused across many different repos without rebuilding).
+
+USER sandbox
+
+# Default: drop into a shell. The orchestrator overrides this with
+# the actual command (installing repo deps, running pytest, etc).
+CMD ["/bin/bash"]

@@ -49,7 +49,7 @@ def main():
         raise SystemExit("Set GEMINI_API_KEY first.")
 
     github_client = GitHubClient(token=github_token, repo_owner=args.owner, repo_name=args.repo)
-    llm_client = GeminiClient(api_key=gemini_key, model="gemini-2.5-flash")
+    llm_client = GeminiClient(api_key=gemini_key, model="gemini-3.5-flash")
 
     print(f"Running bugfixer on {args.owner}/{args.repo} issue #{args.issue} ...\n")
     result = run_pipeline_from_github_issue(

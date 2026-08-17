@@ -88,6 +88,32 @@ def run_pipeline(
                 ],
             )
 
+        if not result.failures:
+            # pytest ran but collected zero failing tests to report on —
+            # usually means 0 tests were collected at all (wrong path,
+            # missing __init__.py, dependency install didn't actually
+            # succeed, or test_path doesn't match anything in this repo).
+            return OrchestrationResult(
+                success=False,
+                final_diff=None,
+                attempts=[
+                    AttemptLog(
+                        attempt_number=0,
+                        diff=None,
+                        explanation=None,
+                        outcome="no_tests_collected",
+                        detail=(
+                            f"pytest reported {result.total} total tests and "
+                            f"passed={result.passed}, but no specific failure was "
+                            f"captured. This usually means pytest collected 0 tests "
+                            f"(check test_path is correct, dependencies installed "
+                            f"correctly, and the repo layout matches expectations). "
+                            f"Raw pytest output:\n{result.raw_stdout}"
+                        ),
+                    )
+                ],
+            )
+
         failure = result.failures[0]  # v1: fix one failure at a time
         implicated = expand_with_local_imports(sandbox, failure.implicated_files)
         source_files = read_source_files(sandbox, implicated)
@@ -153,7 +179,7 @@ def run_pipeline(
 
             # Re-run tests to VERIFY — this is the step that makes the
             # whole pipeline trustworthy, not just plausible.
-            retest = run_test_suite(sandbox, test_path)
+            retest = run_test_suite(sandbox, None)
             if retest.passed:
                 attempts.append(AttemptLog(
                     attempt_number=attempt_num,
@@ -241,11 +267,18 @@ def run_pipeline_from_github_issue(
         # prepare_repo_copy — so we apply the same proven diff here on
         # the clone we intend to push from).
         patch_file = clone_dir / "bugfixer_verified.patch"
-        patch_file.write_text(result.final_diff)
-        subprocess.run(
+        diff_content = result.final_diff if result.final_diff.endswith("\n") else result.final_diff + "\n"
+        patch_file.write_text(diff_content)
+        apply_proc = subprocess.run(
             ["git", "apply", str(patch_file)],
-            cwd=clone_dir, check=True, capture_output=True, text=True,
+            cwd=clone_dir, capture_output=True, text=True,
         )
+        if apply_proc.returncode != 0:
+            raise RuntimeError(
+                f"Verified patch could not be re-applied to the host clone.\n"
+                f"stdout: {apply_proc.stdout}\nstderr: {apply_proc.stderr}\n"
+                f"Diff that failed to apply:\n{result.final_diff}"
+            )
         patch_file.unlink()
 
         branch_name = f"bugfixer/issue-{issue_number}"

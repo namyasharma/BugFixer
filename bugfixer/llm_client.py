@@ -36,7 +36,7 @@ class GeminiClient(LLMClient):
     Get a key at https://aistudio.google.com/apikey (free tier available).
     """
 
-    def __init__(self, api_key: str | None = None, model: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str | None = None, model: str = "gemini-3.5-flash"):
         from google import genai
 
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")

@@ -179,7 +179,7 @@ def run_pipeline(
 
             # Re-run tests to VERIFY — this is the step that makes the
             # whole pipeline trustworthy, not just plausible.
-            retest = run_test_suite(sandbox, test_path)
+            retest = run_test_suite(sandbox, None)
             if retest.passed:
                 attempts.append(AttemptLog(
                     attempt_number=attempt_num,
@@ -267,11 +267,18 @@ def run_pipeline_from_github_issue(
         # prepare_repo_copy — so we apply the same proven diff here on
         # the clone we intend to push from).
         patch_file = clone_dir / "bugfixer_verified.patch"
-        patch_file.write_text(result.final_diff)
-        subprocess.run(
+        diff_content = result.final_diff if result.final_diff.endswith("\n") else result.final_diff + "\n"
+        patch_file.write_text(diff_content)
+        apply_proc = subprocess.run(
             ["git", "apply", str(patch_file)],
-            cwd=clone_dir, check=True, capture_output=True, text=True,
+            cwd=clone_dir, capture_output=True, text=True,
         )
+        if apply_proc.returncode != 0:
+            raise RuntimeError(
+                f"Verified patch could not be re-applied to the host clone.\n"
+                f"stdout: {apply_proc.stdout}\nstderr: {apply_proc.stderr}\n"
+                f"Diff that failed to apply:\n{result.final_diff}"
+            )
         patch_file.unlink()
 
         branch_name = f"bugfixer/issue-{issue_number}"
